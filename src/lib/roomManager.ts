@@ -1,5 +1,4 @@
 import { Player, Room, RoomStatus, RealtimeMessage, ControllerInputEvent, PLAYER_COLORS } from '../types';
-import { supabase, isSupabaseConfigured } from './supabase';
 
 const STORAGE_ROOMS_PREFIX = 'syam_room_';
 const STORAGE_PLAYERS_PREFIX = 'syam_players_';
@@ -89,22 +88,6 @@ export class RoomManager {
     localStorage.setItem(STORAGE_ROOMS_PREFIX + code, JSON.stringify(newRoom));
     localStorage.setItem(STORAGE_PLAYERS_PREFIX + code, JSON.stringify([]));
 
-    // 3. Save to Supabase if configured
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('rooms').upsert({
-          id: newRoom.id,
-          room_code: newRoom.roomCode,
-          status: newRoom.status,
-          max_players: newRoom.maxPlayers,
-          created_at: new Date(newRoom.createdAt).toISOString(),
-          updated_at: new Date(newRoom.updatedAt).toISOString(),
-        });
-      } catch (err) {
-        console.warn('Supabase createRoom warning:', err);
-      }
-    }
-
     return newRoom;
   }
 
@@ -127,30 +110,7 @@ export class RoomManager {
       }
     } catch {}
 
-    // 2. Try Supabase
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data } = await supabase.from('rooms').select('*').in('room_code', [rawCode, code]).single();
-        if (data) {
-          const players = await this.getPlayers(data.room_code);
-          return {
-            id: data.id,
-            roomCode: data.room_code,
-            code: data.room_code,
-            hostPlayerId: data.host_player_id || '',
-            status: data.status as RoomStatus,
-            currentGameId: data.current_game_id,
-            maxPlayers: data.max_players,
-            players,
-            createdAt: new Date(data.created_at).getTime(),
-            updatedAt: new Date(data.updated_at).getTime(),
-            expiresAt: new Date(data.expires_at || Date.now() + 14400000).getTime(),
-          };
-        }
-      } catch {}
-    }
-
-    // 3. Fallback to LocalStorage
+    // 2. Fallback to LocalStorage
     const raw = localStorage.getItem(STORAGE_ROOMS_PREFIX + code) || localStorage.getItem(STORAGE_ROOMS_PREFIX + rawCode);
     if (!raw) return null;
     try {
@@ -180,29 +140,6 @@ export class RoomManager {
         }
       }
     } catch {}
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data } = await supabase.from('players').select('*').in('room_id', [code, rawCode]);
-        if (data && data.length > 0) {
-          return data.map((d) => ({
-            id: d.id,
-            roomId: d.room_id,
-            nickname: d.nickname,
-            avatar: d.avatar,
-            playerNumber: d.player_number,
-            playerColor: d.player_color,
-            score: d.score,
-            partyPoints: d.party_points,
-            ready: d.ready,
-            isReady: d.ready,
-            connected: d.connected,
-            joinedAt: new Date(d.created_at).getTime(),
-            lastSeen: new Date(d.last_seen).getTime(),
-          }));
-        }
-      } catch {}
-    }
 
     const raw = localStorage.getItem(STORAGE_PLAYERS_PREFIX + code) || localStorage.getItem(STORAGE_PLAYERS_PREFIX + rawCode);
     if (!raw) return [];
@@ -497,24 +434,13 @@ export class RoomManager {
     await this.leaveRoom(roomCode, playerId);
   }
 
-  // BROADCAST MESSAGE (Local + Supabase)
+  // BROADCAST MESSAGE (Local BroadcastChannel)
   public static broadcast(roomCode: string, message: RealtimeMessage) {
     const code = this.normalizeRoomCode(roomCode);
     const channel = this.getChannel(code);
     if (channel) {
       try {
         channel.postMessage(message);
-      } catch {}
-    }
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const sbChannel = supabase.channel(`room_${code}`);
-        sbChannel.send({
-          type: 'broadcast',
-          event: message.type,
-          payload: message,
-        });
       } catch {}
     }
   }
