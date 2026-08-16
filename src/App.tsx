@@ -3,6 +3,7 @@ import { Room, Player, ControllerInputEvent } from './types';
 import { roomManager } from './lib/roomManager';
 import { sound } from './lib/sound';
 import { Header } from './components/Header';
+import { QRGeneratorModal } from './components/QRGeneratorModal';
 import { HomePage } from './pages/HomePage';
 import { TVModePage } from './pages/TVModePage';
 import { ControllerPage } from './pages/ControllerPage';
@@ -19,6 +20,7 @@ export default function App() {
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
   const [inputEvents, setInputEvents] = useState<ControllerInputEvent[]>([]);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [isQRModalOpen, setIsQRModalOpen] = useState<boolean>(false);
 
   // Hash-based router listener & URL param parser
   useEffect(() => {
@@ -222,6 +224,7 @@ export default function App() {
             onStartGame={handleStartGame}
             onKickPlayer={handleKickPlayer}
             onLeaveRoom={handleLeaveRoom}
+            onOpenQRGenerator={() => setIsQRModalOpen(true)}
           />
         );
 
@@ -295,12 +298,21 @@ export default function App() {
           soundEnabled={soundEnabled}
           onToggleSound={toggleSound}
           onOpenSettings={() => navigate('settings')}
+          onOpenQRGenerator={() => setIsQRModalOpen(true)}
           onGoHome={() => navigate('home')}
         />
       )}
 
       {/* Main View Area */}
       <main className="flex-1 flex flex-col">{renderContent()}</main>
+
+      {/* Global QR Code Generator Modal */}
+      <QRGeneratorModal
+        isOpen={isQRModalOpen}
+        onClose={() => setIsQRModalOpen(false)}
+        defaultRoomCode={room?.code || ''}
+      />
     </div>
   );
 }
+

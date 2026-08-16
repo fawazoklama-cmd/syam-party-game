@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { GAME_REGISTRY } from '../data/games';
 import { GameDefinition } from '../types';
+import { GameIcon } from '../components/GameIcon';
 import { sound } from '../lib/sound';
 import {
   Gamepad2,
@@ -108,9 +109,9 @@ export const GameLibraryPage: React.FC<GameLibraryProps> = ({
           >
             <div>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-4xl p-2.5 rounded-2xl bg-slate-950 border border-slate-800 group-hover:scale-110 transition">
-                  {game.icon}
-                </span>
+                <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-cyan-400 group-hover:scale-110 transition shadow-inner">
+                  <GameIcon iconName={game.icon} className="w-7 h-7" />
+                </div>
                 <span className="text-[10px] font-black uppercase tracking-wider bg-cyan-500/10 text-cyan-300 px-2.5 py-1 rounded-md border border-cyan-500/20">
                   {game.category}
                 </span>
@@ -129,7 +130,7 @@ export const GameLibraryPage: React.FC<GameLibraryProps> = ({
                 <Users className="w-3.5 h-3.5 text-cyan-400" /> {game.minPlayers}-{game.maxPlayers} P
               </span>
               <span className="flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-amber-400" /> {game.duration}
+                <Clock className="w-3.5 h-3.5 text-amber-400" /> {game.duration}s
               </span>
             </div>
           </div>
@@ -141,9 +142,9 @@ export const GameLibraryPage: React.FC<GameLibraryProps> = ({
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border-2 border-cyan-500/40 rounded-3xl p-8 max-w-lg w-full shadow-2xl space-y-6">
             <div className="flex items-center gap-4">
-              <span className="text-6xl p-4 bg-slate-950 rounded-2xl border border-slate-700">
-                {selectedGameModal.icon}
-              </span>
+              <div className="p-4 bg-slate-950 rounded-2xl border border-slate-700 text-cyan-400 shadow-inner">
+                <GameIcon iconName={selectedGameModal.icon} className="w-12 h-12" />
+              </div>
               <div>
                 <span className="text-xs font-black text-cyan-400 uppercase tracking-wider">
                   {selectedGameModal.category} Game
@@ -151,7 +152,7 @@ export const GameLibraryPage: React.FC<GameLibraryProps> = ({
                 <h2 className="text-2xl font-black text-white">{selectedGameModal.name}</h2>
                 <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
                   <span>👥 {selectedGameModal.minPlayers}-{selectedGameModal.maxPlayers} Pemain</span>
-                  <span>⏱️ {selectedGameModal.duration}</span>
+                  <span>⏱️ {selectedGameModal.duration}s</span>
                 </div>
               </div>
             </div>

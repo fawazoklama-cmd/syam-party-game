@@ -1,9 +1,10 @@
 import React from 'react';
-import { Tv, Smartphone, Gamepad2, Volume2, VolumeX, Settings as SettingsIcon } from 'lucide-react';
+import { Tv, Smartphone, Gamepad2, Volume2, VolumeX, Settings as SettingsIcon, QrCode } from 'lucide-react';
 import { sound } from '../lib/sound';
 
 interface HeaderProps {
   onOpenSettings?: () => void;
+  onOpenQRGenerator?: () => void;
   onGoHome?: () => void;
   soundEnabled: boolean;
   onToggleSound: () => void;
@@ -11,12 +12,13 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
+  onOpenQRGenerator,
   onGoHome,
   soundEnabled,
   onToggleSound,
 }) => {
   return (
-    <header className="flex items-center justify-between px-6 py-4 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-40">
+    <header className="flex items-center justify-between px-4 sm:px-6 py-4 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-40">
       {/* Brand Logo */}
       <div
         onClick={onGoHome}
@@ -38,7 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
               GAME
             </span>
           </div>
-          <div className="text-[10px] text-slate-400 font-medium tracking-wide">
+          <div className="text-[10px] text-slate-400 font-medium tracking-wide hidden sm:block">
             Satu TV. Banyak HP. Satu Party.
           </div>
         </div>
@@ -46,6 +48,20 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right Controls */}
       <div className="flex items-center gap-2">
+        {onOpenQRGenerator && (
+          <button
+            onClick={() => {
+              sound.playClick();
+              onOpenQRGenerator();
+            }}
+            title="QR Generator"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-cyan-300 text-xs font-bold transition active:scale-95"
+          >
+            <QrCode className="w-4 h-4 text-cyan-400" />
+            <span className="hidden sm:inline">QR Generator</span>
+          </button>
+        )}
+
         <button
           onClick={onToggleSound}
           title={soundEnabled ? 'Matikan Suara' : 'Nyalakan Suara'}
@@ -67,3 +83,4 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+

@@ -8,6 +8,20 @@ const STORAGE_CURRENT_SESSION = 'syam_active_session';
 export class RoomManager {
   private static broadcastChannels: Map<string, BroadcastChannel> = new Map();
 
+  // Helper to normalize room code (e.g. "4821", "SYAM4821", "syam-4821" -> "SYAM-4821")
+  public static normalizeRoomCode(input: string): string {
+    let clean = (input || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!clean) return '';
+    if (!clean.startsWith('SYAM-')) {
+      if (clean.startsWith('SYAM')) {
+        clean = 'SYAM-' + clean.slice(4).replace(/^-/, '');
+      } else {
+        clean = 'SYAM-' + clean;
+      }
+    }
+    return clean;
+  }
+
   // Helper to generate readable 4-digit room code like SYAM-4821
   public static generateRoomCode(): string {
     const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -71,14 +85,15 @@ export class RoomManager {
 
   // GET ROOM
   public static async getRoom(roomCode: string): Promise<Room | null> {
-    const code = roomCode.toUpperCase();
+    const rawCode = (roomCode || '').trim().toUpperCase();
+    const normalizedCode = this.normalizeRoomCode(rawCode);
     
     // Check Supabase if configured
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data } = await supabase.from('rooms').select('*').eq('room_code', code).single();
+        const { data } = await supabase.from('rooms').select('*').in('room_code', [rawCode, normalizedCode]).single();
         if (data) {
-          const players = await this.getPlayers(code);
+          const players = await this.getPlayers(data.room_code);
           return {
             id: data.id,
             roomCode: data.room_code,
@@ -97,13 +112,14 @@ export class RoomManager {
     }
 
     // Fallback to local storage
-    const raw = localStorage.getItem(STORAGE_ROOMS_PREFIX + code);
+    const raw = localStorage.getItem(STORAGE_ROOMS_PREFIX + normalizedCode) || localStorage.getItem(STORAGE_ROOMS_PREFIX + rawCode);
     if (!raw) return null;
     try {
       const parsed = JSON.parse(raw) as Room;
-      const players = await this.getPlayers(code);
+      const targetCode = parsed.roomCode || parsed.code || normalizedCode;
+      const players = await this.getPlayers(targetCode);
       parsed.players = players;
-      parsed.code = parsed.roomCode || code;
+      parsed.code = targetCode;
       return parsed;
     } catch {
       return null;
@@ -112,11 +128,12 @@ export class RoomManager {
 
   // GET PLAYERS
   public static async getPlayers(roomCode: string): Promise<Player[]> {
-    const code = roomCode.toUpperCase();
+    const rawCode = (roomCode || '').trim().toUpperCase();
+    const code = this.normalizeRoomCode(rawCode) || rawCode;
     
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data } = await supabase.from('players').select('*').eq('room_id', code);
+        const { data } = await supabase.from('players').select('*').in('room_id', [code, rawCode]);
         if (data && data.length > 0) {
           return data.map((d) => ({
             id: d.id,
@@ -137,7 +154,7 @@ export class RoomManager {
       } catch {}
     }
 
-    const raw = localStorage.getItem(STORAGE_PLAYERS_PREFIX + code);
+    const raw = localStorage.getItem(STORAGE_PLAYERS_PREFIX + code) || localStorage.getItem(STORAGE_PLAYERS_PREFIX + rawCode);
     if (!raw) return [];
     try {
       const parsed = JSON.parse(raw) as Player[];
@@ -149,7 +166,7 @@ export class RoomManager {
 
   // SAVE PLAYERS (INTERNAL)
   private static savePlayers(roomCode: string, players: Player[]) {
-    const code = roomCode.toUpperCase();
+    const code = this.normalizeRoomCode(roomCode) || roomCode.toUpperCase();
     localStorage.setItem(STORAGE_PLAYERS_PREFIX + code, JSON.stringify(players));
   }
 
@@ -160,11 +177,12 @@ export class RoomManager {
     avatar: string,
     existingPlayerId?: string
   ): Promise<{ player: Player; room: Room } | { error: string }> {
-    const code = roomCode.toUpperCase().trim();
-    let room = await this.getRoom(code);
+    const cleanCode = this.normalizeRoomCode(roomCode) || roomCode.toUpperCase().trim();
+    let room = await this.getRoom(cleanCode);
     if (!room) {
       return { error: 'Room tidak ditemukan. Periksa kembali Room Code.' };
     }
+    const code = room.code || cleanCode;
 
     if (room.status === 'CLOSED') {
       return { error: 'Room sudah ditutup.' };
