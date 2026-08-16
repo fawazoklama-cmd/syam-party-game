@@ -112,22 +112,26 @@ export default function App() {
   };
 
   // 3. Controller Join Room
-  const handleJoinRoom = async (code: string, nickname: string, avatar: string): Promise<boolean> => {
+  const handleJoinRoom = async (
+    code: string,
+    nickname: string,
+    avatar: string
+  ): Promise<{ success: boolean; error?: string }> => {
     sound.init();
     try {
-      const joinedRoom = await roomManager.joinRoom(code, nickname, avatar);
-      if (joinedRoom) {
-        setRoom(joinedRoom);
-        setPlayers(joinedRoom.players);
+      const res = await roomManager.joinRoom(code, nickname, avatar);
+      if (res.success && res.room) {
+        setRoom(res.room);
+        setPlayers(res.room.players);
         const myId = roomManager.getCurrentPlayerId();
-        const me = joinedRoom.players.find((p) => p.id === myId) || null;
+        const me = res.room.players.find((p) => p.id === myId) || res.player || null;
         setCurrentPlayer(me);
-        return true;
+        return { success: true };
       }
-      return false;
-    } catch (err) {
+      return { success: false, error: res.error || 'Gagal bergabung. Pastikan kode room benar.' };
+    } catch (err: any) {
       console.error('Join error:', err);
-      return false;
+      return { success: false, error: 'Terjadi kesalahan koneksi.' };
     }
   };
 

@@ -17,7 +17,7 @@ interface ControllerPageProps {
   initialCode?: string;
   room: Room | null;
   currentPlayer: Player | null;
-  onJoinRoom: (code: string, nickname: string, avatar: string) => Promise<boolean>;
+  onJoinRoom: (code: string, nickname: string, avatar: string) => Promise<{ success: boolean; error?: string }>;
   onSendInput: (action: string, payload?: any) => void;
   onLeaveRoom: () => void;
   onToggleReady: () => void;
@@ -59,14 +59,14 @@ export const ControllerPage: React.FC<ControllerPageProps> = ({
     sound.playClick();
 
     try {
-      const success = await onJoinRoom(code.trim().toUpperCase(), nickname.trim(), avatar);
-      if (!success) {
-        setErrorMsg('Gagal bergabung. Pastikan kode room benar dan masih aktif.');
+      const res = await onJoinRoom(code.trim().toUpperCase(), nickname.trim(), avatar);
+      if (!res.success) {
+        setErrorMsg(res.error || 'Gagal bergabung. Pastikan kode room benar dan masih aktif.');
       } else {
         sound.playVictory();
       }
     } catch (err: any) {
-      setErrorMsg('Terjadi kesalahan koneksi.');
+      setErrorMsg('Terjadi kesalahan koneksi ke server.');
     } finally {
       setIsJoining(false);
     }

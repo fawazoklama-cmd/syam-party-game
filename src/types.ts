@@ -63,6 +63,7 @@ export interface ControllerInputEvent {
 
 export interface RealtimeMessage {
   type: 
+    | 'INIT'
     | 'PLAYER_JOIN'
     | 'PLAYER_LEAVE'
     | 'PLAYER_READY'
