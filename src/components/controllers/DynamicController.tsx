@@ -18,25 +18,37 @@ import {
 } from 'lucide-react';
 
 interface DynamicControllerProps {
-  room: Room;
+  room?: Room | null;
   player: Player;
-  players: Player[];
+  players?: Player[];
   gameId: string;
+  onSendAction?: (action: string, payload?: any) => void;
 }
 
 export const DynamicController: React.FC<DynamicControllerProps> = ({
   room,
   player,
-  players,
+  players = [],
   gameId,
+  onSendAction,
 }) => {
   const [lastAction, setLastAction] = useState<string | null>(null);
+
+  const effectivePlayers = players.length > 0 ? players : room?.players || [];
+  const roomCode = room?.roomCode || room?.code || '';
 
   const sendInput = (action: string, payload?: any) => {
     vibrate(40);
     sound.playClick();
     setLastAction(action);
-    RoomManager.sendControllerInput(room.roomCode, player.id, gameId, action, payload);
+
+    if (onSendAction) {
+      onSendAction(action, payload);
+    }
+    if (roomCode && player?.id) {
+      RoomManager.sendControllerInput(roomCode, player.id, gameId, action, payload);
+    }
+
     setTimeout(() => {
       setLastAction((prev) => (prev === action ? null : prev));
     }, 400);
@@ -76,7 +88,7 @@ export const DynamicController: React.FC<DynamicControllerProps> = ({
       return <AlphabetKeyboard onLetter={(char) => sendInput('GUESS_LETTER', { letter: char })} />;
 
     case 'drawing':
-      return <DrawingPad roomCode={room.roomCode} playerId={player.id} players={players} onGuess={(txt) => sendInput('GUESS_DRAWING', { text: txt })} />;
+      return <DrawingPad roomCode={roomCode} playerId={player?.id || ''} players={effectivePlayers} onGuess={(txt) => sendInput('GUESS_DRAWING', { text: txt })} />;
 
     case 'tic-tac-toe':
       return <TicTacToeGrid onPick={(idx) => sendInput('PICK_CELL', { index: idx })} />;
@@ -91,7 +103,7 @@ export const DynamicController: React.FC<DynamicControllerProps> = ({
       return <MemoryPads onPad={(idx) => sendInput('PRESS_PAD', { index: idx })} />;
 
     case 'voting':
-      return <VotingPicker players={players.filter((p) => p.id !== player.id)} onVote={(targetId) => sendInput('VOTE_PLAYER', { targetPlayerId: targetId })} />;
+      return <VotingPicker players={effectivePlayers.filter((p) => p.id !== player?.id)} onVote={(targetId) => sendInput('VOTE_PLAYER', { targetPlayerId: targetId })} />;
 
     case 'who-am-i':
       return <WhoAmIControls onGiveClue={(clue) => sendInput('SUBMIT_CLUE', { clue })} onGuessIdentity={(ans) => sendInput('GUESS_IDENTITY', { answer: ans })} />;

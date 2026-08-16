@@ -259,8 +259,10 @@ export const ControllerPage: React.FC<ControllerPageProps> = ({
       {/* Controller Area */}
       <div className="flex-1 w-full overflow-hidden touch-manipulation">
         <DynamicController
-          gameId={room.currentGameId}
+          room={room}
           player={currentPlayer}
+          players={room.players || []}
+          gameId={room.currentGameId || 'game'}
           onSendAction={onSendInput}
         />
       </div>

@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Room, Player, GameDefinition } from '../types';
 import { GAME_REGISTRY } from '../data/games';
 import { QRCodeDisplay } from '../components/QRCodeDisplay';
 import { GameIcon } from '../components/GameIcon';
 import { sound } from '../lib/sound';
+import { DynamicController } from '../components/controllers/DynamicController';
+import { RoomManager } from '../lib/roomManager';
 import {
   Users,
   Play,
@@ -18,6 +20,7 @@ import {
   Clock,
   Flame,
   QrCode,
+  Keyboard,
 } from 'lucide-react';
 
 interface TVModeProps {
@@ -40,11 +43,19 @@ export const TVModePage: React.FC<TVModeProps> = ({
   const [selectedGameId, setSelectedGameId] = useState<string>(room.currentGameId || 'quiz-battle');
   const [isSpinning, setIsSpinning] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [showTVController, setShowTVController] = useState(false);
 
   const selectedGame = GAME_REGISTRY.find((g) => g.id === selectedGameId) || GAME_REGISTRY[0];
+  const roomCode = room.code || room.roomCode;
+  const hostPlayer = players.find((p) => p.isHost) || players[0] || {
+    id: 'host_tv',
+    nickname: 'Host TV',
+    avatar: '📺',
+    playerColor: '#06b6d4',
+  };
 
   // Join URL for QR code
-  const joinUrl = `${window.location.origin}/#controller?code=${room.code}`;
+  const joinUrl = `${window.location.origin}/#controller?code=${roomCode}`;
 
   const handleRandomSpin = () => {
     if (isSpinning) return;
@@ -83,17 +94,33 @@ export const TVModePage: React.FC<TVModeProps> = ({
               Layar TV Utama &bull; Room Code
             </span>
             <span className="text-3xl font-black text-cyan-400 tracking-wider">
-              {room.code}
+              {roomCode}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-4">
-          <div className="flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-xl text-slate-300 border border-slate-700">
-            <Users className="w-5 h-5 text-cyan-400" />
-            <span className="font-extrabold text-white text-lg">{players.length}</span>
+        <div className="flex items-center flex-wrap gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-2 bg-slate-800 px-3.5 py-2 rounded-xl text-slate-300 border border-slate-700">
+            <Users className="w-4 h-4 text-cyan-400" />
+            <span className="font-extrabold text-white text-base">{players.length}</span>
             <span className="text-xs text-slate-400">/ {room.maxPlayers} Pemain</span>
           </div>
+
+          <button
+            onClick={() => {
+              sound.playClick();
+              setShowTVController((prev) => !prev);
+            }}
+            title="Buka Controller Gamepad di Layar TV ini"
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs transition active:scale-95 border ${
+              showTVController
+                ? 'bg-cyan-500 text-slate-950 border-cyan-300'
+                : 'bg-cyan-500/20 hover:bg-cyan-500/30 border-cyan-500/40 text-cyan-300'
+            }`}
+          >
+            <Gamepad2 className="w-4 h-4" />
+            <span>{showTVController ? 'Tutup Controller TV' : '🎮 Controller Layar TV'}</span>
+          </button>
 
           {onOpenQRGenerator && (
             <button
@@ -102,10 +129,10 @@ export const TVModePage: React.FC<TVModeProps> = ({
                 onOpenQRGenerator();
               }}
               title="Buka QR Generator Kustom"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-bold text-xs transition active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-bold text-xs transition active:scale-95"
             >
               <QrCode className="w-4 h-4" />
-              <span className="hidden md:inline">Kustom QR</span>
+              <span className="hidden sm:inline">Kustom QR</span>
             </button>
           )}
 
@@ -126,7 +153,7 @@ export const TVModePage: React.FC<TVModeProps> = ({
         {/* LEFT COLUMN: QR Code & Joined Players (5 cols) */}
         <div className="lg:col-span-5 flex flex-col justify-between bg-slate-900/80 rounded-3xl border border-slate-800 p-6 shadow-xl space-y-4">
           <div className="flex flex-col sm:flex-row items-center gap-5 pb-4 border-b border-slate-800">
-            <QRCodeDisplay url={joinUrl} size={135} title={`Scan Room ${room.code}`} />
+            <QRCodeDisplay url={joinUrl} size={135} title={`Scan Room ${roomCode}`} />
             <div className="space-y-1.5 text-center sm:text-left">
               <span className="text-[11px] font-black text-cyan-400 uppercase tracking-wider bg-cyan-500/10 px-2.5 py-0.5 rounded-md border border-cyan-500/20 inline-block">
                 Scan Untuk Gabung
@@ -136,8 +163,17 @@ export const TVModePage: React.FC<TVModeProps> = ({
                 {window.location.host}/#controller
               </p>
               <div className="text-xs text-amber-400 font-bold pt-1">
-                Atau masukkan kode <span className="underline font-black">{room.code}</span>
+                Atau masukkan kode <span className="underline font-black">{roomCode}</span>
               </div>
+            </div>
+          </div>
+
+          {/* Quick Keyboard Indicator */}
+          <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 px-3 py-2 rounded-xl text-xs text-slate-300">
+            <Keyboard className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="font-bold text-white">Kontrol TV Langsung: </span>
+              <span className="text-slate-400">[WASD/Panah] gerak &bull; [1-4] kuis &bull; [Spasi] aksi</span>
             </div>
           </div>
 
@@ -311,7 +347,36 @@ export const TVModePage: React.FC<TVModeProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Slide-Up / Floating Virtual Controller Panel in TV Lobby */}
+      {showTVController && (
+        <div className="fixed bottom-6 right-6 z-50 w-80 sm:w-96 max-h-[70vh] bg-slate-900/95 border-2 border-cyan-500/50 rounded-3xl p-4 shadow-2xl backdrop-blur-md flex flex-col animate-in fade-in slide-in-from-bottom-6 duration-200">
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-xs">
+            <div className="flex items-center gap-2 font-bold text-white">
+              <span className="text-lg">{hostPlayer.avatar}</span>
+              <span>Gamepad Layar TV ({hostPlayer.nickname})</span>
+            </div>
+            <button
+              onClick={() => setShowTVController(false)}
+              className="p-1 text-slate-400 hover:text-white rounded-lg transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto max-h-[50vh] p-1">
+            <DynamicController
+              room={room}
+              player={hostPlayer as Player}
+              players={players}
+              gameId={selectedGameId}
+              onSendAction={(act, payload) => {
+                RoomManager.sendControllerInput(roomCode, hostPlayer.id, selectedGameId, act, payload);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
