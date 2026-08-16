@@ -1,0 +1,6 @@
+{
+  "name": "SYAM PARTY GAME",
+  "description": "Multiplayer party game TV & HP Controller modern platform dengan 20 game interaktif seru untuk keluarga dan teman.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
