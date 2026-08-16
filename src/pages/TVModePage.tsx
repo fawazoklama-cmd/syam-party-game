@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Room, Player, GameDefinition } from '../types';
 import { GAME_REGISTRY } from '../data/games';
 import { QRCodeDisplay } from '../components/QRCodeDisplay';
 import { GameIcon } from '../components/GameIcon';
 import { sound } from '../lib/sound';
 import { DynamicController } from '../components/controllers/DynamicController';
-import { RoomManager } from '../lib/roomManager';
+import { RoomManager, roomManager } from '../lib/roomManager';
+import { WebRTCStatus } from '../lib/webrtcManager';
 import {
   Users,
   Play,
@@ -21,6 +22,8 @@ import {
   Flame,
   QrCode,
   Keyboard,
+  Radio,
+  Activity,
 } from 'lucide-react';
 
 interface TVModeProps {
@@ -44,6 +47,13 @@ export const TVModePage: React.FC<TVModeProps> = ({
   const [isSpinning, setIsSpinning] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [showTVController, setShowTVController] = useState(false);
+  const [webrtcStatus, setWebrtcStatus] = useState<WebRTCStatus>(roomManager.getWebRTCStatus());
+
+  useEffect(() => {
+    return roomManager.onWebRTCStatusChange((status) => {
+      setWebrtcStatus(status);
+    });
+  }, []);
 
   const selectedGame = GAME_REGISTRY.find((g) => g.id === selectedGameId) || GAME_REGISTRY[0];
   const roomCode = room.code || room.roomCode;
@@ -100,6 +110,35 @@ export const TVModePage: React.FC<TVModeProps> = ({
         </div>
 
         <div className="flex items-center flex-wrap gap-2.5 sm:gap-3">
+          {/* Connection Quality Badge */}
+          <div
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black border ${
+              webrtcStatus.quality === 'webrtc_connected'
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                : webrtcStatus.quality === 'connecting'
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
+                : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+            }`}
+            title={
+              webrtcStatus.quality === 'webrtc_connected'
+                ? `P2P WebRTC Aktif (${webrtcStatus.connectedPeersCount} peers, RTT: ${webrtcStatus.rttMs || '<10'}ms)`
+                : 'Realtime Server Sync Aktif'
+            }
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                webrtcStatus.quality === 'webrtc_connected'
+                  ? 'bg-emerald-400 animate-ping'
+                  : 'bg-cyan-400 animate-pulse'
+              }`}
+            />
+            <span>
+              {webrtcStatus.quality === 'webrtc_connected'
+                ? `P2P WebRTC ${webrtcStatus.rttMs ? `(${webrtcStatus.rttMs}ms)` : '⚡'}`
+                : 'Realtime Sync'}
+            </span>
+          </div>
+
           <div className="flex items-center gap-2 bg-slate-800 px-3.5 py-2 rounded-xl text-slate-300 border border-slate-700">
             <Users className="w-4 h-4 text-cyan-400" />
             <span className="font-extrabold text-white text-base">{players.length}</span>

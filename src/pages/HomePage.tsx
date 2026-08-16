@@ -6,6 +6,7 @@ import { sound } from '../lib/sound';
 interface HomePageProps {
   onSelectPlayTV: () => void;
   onSelectPlayController: () => void;
+  onJoinWithCode?: (code: string) => void;
   onOpenLibrary: () => void;
   onOpenLeaderboard: () => void;
   onOpenSettings: () => void;
@@ -15,11 +16,24 @@ interface HomePageProps {
 export const HomePage: React.FC<HomePageProps> = ({
   onSelectPlayTV,
   onSelectPlayController,
+  onJoinWithCode,
   onOpenLibrary,
   onOpenLeaderboard,
   onOpenSettings,
   onQuickRandomGame,
 }) => {
+  const [quickCode, setQuickCode] = useState('');
+
+  const handleQuickJoinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickCode.trim()) return;
+    sound.playClick();
+    if (onJoinWithCode) {
+      onJoinWithCode(quickCode.trim());
+    } else {
+      onSelectPlayController();
+    }
+  };
   return (
     <div className="flex flex-col min-h-[calc(100vh-73px)] justify-between p-6 md:p-12 max-w-7xl mx-auto w-full select-none">
       {/* Hero Banner */}
@@ -124,6 +138,35 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Quick Join With Room Code Bar */}
+      <div className="max-w-2xl mx-auto w-full mb-6">
+        <form
+          onSubmit={handleQuickJoinSubmit}
+          className="flex flex-col sm:flex-row items-center gap-2.5 p-2 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl"
+        >
+          <div className="flex-1 flex items-center gap-2 px-3 py-1.5 w-full">
+            <span className="text-slate-400 text-xs font-black uppercase tracking-wider whitespace-nowrap">
+              Kode Room:
+            </span>
+            <input
+              type="text"
+              value={quickCode}
+              onChange={(e) => setQuickCode(e.target.value.toUpperCase())}
+              placeholder="Contoh: 4821 atau SYAM-4821"
+              maxLength={12}
+              className="w-full bg-slate-950 px-3.5 py-2.5 rounded-xl border border-slate-700 focus:border-indigo-400 text-white font-black text-center sm:text-left text-sm tracking-wider uppercase outline-none transition"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={!quickCode.trim()}
+            className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white font-extrabold text-xs uppercase tracking-wider transition active:scale-95 shadow-lg shadow-indigo-500/25 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            ⚡ Masuk Room
+          </button>
+        </form>
       </div>
 
       {/* Quick Menu Actions Bar */}

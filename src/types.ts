@@ -67,6 +67,7 @@ export interface RealtimeMessage {
     | 'PLAYER_JOIN'
     | 'PLAYER_LEAVE'
     | 'PLAYER_READY'
+    | 'PLAYER_PROFILE_UPDATE'
     | 'HOST_CHANGE'
     | 'ROOM_UPDATE'
     | 'SELECT_GAME'

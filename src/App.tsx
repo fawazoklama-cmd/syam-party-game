@@ -22,26 +22,38 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [isQRModalOpen, setIsQRModalOpen] = useState<boolean>(false);
 
-  // Hash-based router listener & URL param parser
+  // Hash-based & Search query router listener & URL param parser
   useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.replace('#', '') || 'home';
-      const [path, query] = hash.split('?');
-      setCurrentRoute(path || 'home');
+    const handleUrlRouting = () => {
+      // 1. Check window.location.search (e.g. ?code=SYAM-1234 or ?room=1234 or ?mode=controller)
+      const searchParams = new URLSearchParams(window.location.search);
+      const searchCode = searchParams.get('code') || searchParams.get('room') || '';
+      const searchMode = searchParams.get('mode') || '';
 
-      if (query) {
-        const params = new URLSearchParams(query);
-        const codeParam = params.get('code');
-        if (codeParam) {
-          setUrlParamCode(codeParam.toUpperCase());
-        }
+      // 2. Check window.location.hash (e.g. #controller?code=SYAM-1234)
+      const rawHash = window.location.hash.replace('#', '') || '';
+      const [path, query] = rawHash.split('?');
+      const hashParams = new URLSearchParams(query || '');
+      const hashCode = hashParams.get('code') || hashParams.get('room') || '';
+
+      const finalCode = (hashCode || searchCode || '').toUpperCase();
+      if (finalCode) {
+        setUrlParamCode(finalCode);
       }
+
+      let route = path || searchMode || (finalCode ? 'controller' : 'home');
+      if (!route) route = 'home';
+      setCurrentRoute(route);
     };
 
-    window.addEventListener('hashchange', handleHashChange);
-    handleHashChange(); // initial check
+    window.addEventListener('hashchange', handleUrlRouting);
+    window.addEventListener('popstate', handleUrlRouting);
+    handleUrlRouting(); // initial check
 
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    return () => {
+      window.removeEventListener('hashchange', handleUrlRouting);
+      window.removeEventListener('popstate', handleUrlRouting);
+    };
   }, []);
 
   const navigate = (route: string, params?: { code?: string }) => {
@@ -281,6 +293,10 @@ export default function App() {
           <HomePage
             onSelectPlayTV={handleSelectPlayTV}
             onSelectPlayController={handleSelectPlayController}
+            onJoinWithCode={(code) => {
+              setUrlParamCode(code.toUpperCase());
+              navigate('controller', { code: code.toUpperCase() });
+            }}
             onOpenLibrary={() => navigate('library')}
             onOpenLeaderboard={() => navigate('leaderboard')}
             onOpenSettings={() => navigate('settings')}

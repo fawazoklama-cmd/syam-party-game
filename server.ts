@@ -62,6 +62,20 @@ function normalizeRoomCode(input: string): string {
   return clean;
 }
 
+// Find room by normalized code or raw code
+function findRoom(inputCode: string): Room | null {
+  const norm = normalizeRoomCode(inputCode);
+  if (rooms.has(norm)) return rooms.get(norm)!;
+  const raw = (inputCode || '').trim().toUpperCase();
+  if (rooms.has(raw)) return rooms.get(raw)!;
+  for (const [key, r] of rooms.entries()) {
+    if (key.endsWith(raw) || r.roomCode.endsWith(raw) || r.code.endsWith(raw)) {
+      return r;
+    }
+  }
+  return null;
+}
+
 // Helper to broadcast SSE event to all connected clients of a room
 function broadcastToRoom(roomCode: string, type: string, payload: any, senderId: string = 'SERVER') {
   const code = normalizeRoomCode(roomCode);
@@ -150,8 +164,8 @@ async function startServer() {
 
   // 2. Get Room
   app.get('/api/rooms/:code', (req, res) => {
-    const code = normalizeRoomCode(req.params.code);
-    const room = rooms.get(code);
+    const rawCode = req.params.code;
+    const room = findRoom(rawCode);
     if (!room) {
       res.status(404).json({ error: 'Room tidak ditemukan atau sudah kedaluwarsa' });
       return;
@@ -161,9 +175,10 @@ async function startServer() {
 
   // 3. Join Room
   app.post('/api/rooms/:code/join', (req, res) => {
-    const code = normalizeRoomCode(req.params.code);
+    const rawCode = req.params.code;
     const { nickname, avatar, existingPlayerId } = req.body || {};
-    let room = rooms.get(code);
+    let room = findRoom(rawCode);
+    const code = room ? room.code : normalizeRoomCode(rawCode);
 
     // Auto-create room if it doesn't exist yet (very forgiving for player convenience)
     if (!room) {
@@ -189,7 +204,7 @@ async function startServer() {
       return;
     }
 
-    // Check reconnection
+    // Check reconnection or existing player
     if (existingPlayerId) {
       const existing = room.players.find((p) => p.id === existingPlayerId);
       if (existing) {
@@ -239,6 +254,31 @@ async function startServer() {
 
     broadcastToRoom(code, 'PLAYER_JOIN', { player: newPlayer, players: room.players, room }, newPlayer.id);
     res.json({ success: true, player: newPlayer, room });
+  });
+
+  // 3b. Update Player Profile (Nickname / Avatar in Lobby)
+  app.post('/api/rooms/:code/player/profile', (req, res) => {
+    const rawCode = req.params.code;
+    const { playerId, nickname, avatar } = req.body || {};
+    const room = findRoom(rawCode);
+    if (!room) {
+      res.status(404).json({ error: 'Room tidak ditemukan' });
+      return;
+    }
+
+    const target = room.players.find((p) => p.id === playerId);
+    if (target) {
+      if (nickname) target.nickname = nickname.trim().slice(0, 16);
+      if (avatar) target.avatar = avatar;
+      target.lastSeen = Date.now();
+      room.updatedAt = Date.now();
+
+      broadcastToRoom(room.code, 'PLAYER_PROFILE_UPDATE', { player: target, players: room.players }, playerId);
+      res.json({ success: true, player: target, room });
+      return;
+    }
+
+    res.status(404).json({ error: 'Pemain tidak ditemukan dalam room ini' });
   });
 
   // 4. Update Player Ready
@@ -299,7 +339,31 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  // 7. Update Score / Party Points
+  // 7. WebRTC Signaling (Offers, Answers, ICE Candidates)
+  app.post('/api/rooms/:code/signal', (req, res) => {
+    const code = normalizeRoomCode(req.params.code);
+    const { senderId, targetId, signalType, data } = req.body || {};
+
+    if (!signalType || !data) {
+      res.status(400).json({ error: 'Data signal WebRTC tidak lengkap' });
+      return;
+    }
+
+    const signalMessage = {
+      type: 'WEBRTC_SIGNAL',
+      roomId: code,
+      senderId: senderId || 'UNKNOWN',
+      targetId: targetId || 'ALL',
+      signalType, // 'offer' | 'answer' | 'ice-candidate' | 'ping' | 'pong'
+      data,
+      timestamp: Date.now(),
+    };
+
+    broadcastToRoom(code, 'WEBRTC_SIGNAL', signalMessage, senderId);
+    res.json({ success: true });
+  });
+
+  // 8. Update Score / Party Points
   app.post('/api/rooms/:code/score', (req, res) => {
     const code = normalizeRoomCode(req.params.code);
     const { roundRankings, playerId, scoreBonus } = req.body || {};

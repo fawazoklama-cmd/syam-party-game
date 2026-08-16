@@ -1,4 +1,5 @@
 import { Player, Room, RoomStatus, RealtimeMessage, ControllerInputEvent, PLAYER_COLORS } from '../types';
+import { webrtcManager, WebRTCStatus } from './webrtcManager';
 
 const STORAGE_ROOMS_PREFIX = 'syam_room_';
 const STORAGE_PLAYERS_PREFIX = 'syam_players_';
@@ -293,6 +294,47 @@ export class RoomManager {
     return { player: newPlayer, room };
   }
 
+  // UPDATE PLAYER PROFILE (in Lobby)
+  public static async updatePlayerProfile(
+    roomCode: string,
+    playerId: string,
+    nickname: string,
+    avatar: string
+  ): Promise<Player | null> {
+    const code = this.normalizeRoomCode(roomCode);
+
+    try {
+      const res = await fetch(`/api/rooms/${encodeURIComponent(code)}/player/profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId, nickname, avatar }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.player) {
+          return data.player;
+        }
+      }
+    } catch {}
+
+    const players = await this.getPlayers(code);
+    const target = players.find((p) => p.id === playerId);
+    if (target) {
+      if (nickname) target.nickname = nickname.trim().slice(0, 16);
+      if (avatar) target.avatar = avatar;
+      this.savePlayers(code, players);
+      this.broadcast(code, {
+        type: 'PLAYER_PROFILE_UPDATE',
+        roomId: code,
+        senderId: playerId,
+        payload: { player: target, players },
+        timestamp: Date.now(),
+      });
+      return target;
+    }
+    return null;
+  }
+
   // UPDATE PLAYER READY
   public static async setPlayerReady(roomCode: string, playerId: string, ready: boolean) {
     const code = this.normalizeRoomCode(roomCode);
@@ -463,16 +505,10 @@ export class RoomManager {
       timestamp: Date.now(),
     };
 
-    // 1. Send to Server API
-    try {
-      fetch(`/api/rooms/${encodeURIComponent(code)}/input`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(event),
-      }).catch(() => {});
-    } catch {}
+    // 1. Try sending via ultra-low latency WebRTC DataChannel (0-5ms)
+    const sentViaWebRTC = webrtcManager.sendInputDirect(event);
 
-    // 2. Broadcast to local channel
+    // 2. Broadcast to local channel (for same-browser multi-window testing)
     this.broadcast(code, {
       type: 'CONTROLLER_INPUT',
       roomId: code,
@@ -480,9 +516,20 @@ export class RoomManager {
       payload: event,
       timestamp: Date.now(),
     });
+
+    // 3. Send to Server API if not sent via WebRTC or for reliable recording
+    if (!sentViaWebRTC || action === 'BUZZ' || action === 'SUBMIT' || action === 'ANSWER') {
+      try {
+        fetch(`/api/rooms/${encodeURIComponent(code)}/input`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(event),
+        }).catch(() => {});
+      } catch {}
+    }
   }
 
-  // SUBSCRIBE TO ROOM REALTIME EVENTS (SSE + BroadcastChannel + Storage)
+  // SUBSCRIBE TO ROOM REALTIME EVENTS (SSE + WebRTC Signaling + BroadcastChannel + Storage)
   public static subscribe(
     roomCode: string,
     onMessage: (msg: RealtimeMessage) => void
@@ -499,6 +546,10 @@ export class RoomManager {
           try {
             const data = JSON.parse(event.data);
             if (data && typeof data === 'object') {
+              // Intercept WebRTC Signaling events
+              if (data.type === 'WEBRTC_SIGNAL' && data.payload) {
+                webrtcManager.handleSignal(data.payload);
+              }
               onMessage(data as RealtimeMessage);
             }
           } catch {}
@@ -582,6 +633,11 @@ class ClientRoomManager {
   private unsubCurrentRoom: (() => void) | null = null;
 
   constructor() {
+    // Setup Direct WebRTC Input pipeline
+    webrtcManager.setInputCallback((event: ControllerInputEvent) => {
+      this.inputListeners.forEach((fn) => fn(event));
+    });
+
     this.restoreSession();
   }
 
@@ -596,12 +652,28 @@ class ClientRoomManager {
               this.currentRoom = r;
               this.currentPlayerId = playerId || null;
               this.subscribeToActiveRoom(roomCode);
+              this.initWebRTCForCurrentRoom();
               this.notifyRoom();
             }
           });
         }
       }
     } catch {}
+  }
+
+  private initWebRTCForCurrentRoom() {
+    if (!this.currentRoom) return;
+    const code = this.currentRoom.code || this.currentRoom.roomCode;
+    const isHost =
+      Boolean(this.currentPlayerId && this.currentRoom.hostPlayerId === this.currentPlayerId) ||
+      Boolean(this.currentRoom.players.find((p) => p.id === this.currentPlayerId)?.isHost);
+
+    webrtcManager.init(
+      code,
+      this.currentPlayerId || `client_${Date.now()}`,
+      isHost,
+      this.currentRoom.hostPlayerId || (isHost ? this.currentPlayerId || '' : '')
+    );
   }
 
   private saveSession(roomCode: string, playerId: string) {
@@ -633,11 +705,13 @@ class ClientRoomManager {
           if (msg.payload.players) {
             this.currentRoom!.players = msg.payload.players;
           }
+          this.initWebRTCForCurrentRoom();
           this.notifyRoom();
         } else {
           RoomManager.getRoom(roomCode).then((r) => {
             if (r) {
               this.currentRoom = r;
+              this.initWebRTCForCurrentRoom();
               this.notifyRoom();
             }
           });
@@ -677,6 +751,14 @@ class ClientRoomManager {
     return this.currentPlayerId;
   }
 
+  public getWebRTCStatus(): WebRTCStatus {
+    return webrtcManager.getStatus();
+  }
+
+  public onWebRTCStatusChange(callback: (status: WebRTCStatus) => void): () => void {
+    return webrtcManager.onStatusChange(callback);
+  }
+
   public async createRoom(nickname: string = 'Host TV', avatar: string = '📺'): Promise<Room> {
     const code = RoomManager.generateRoomCode();
     const newRoom = await RoomManager.createRoom(code);
@@ -687,6 +769,7 @@ class ClientRoomManager {
       this.currentRoom = joinRes.room;
       this.saveSession(code, joinRes.player.id);
       this.subscribeToActiveRoom(code);
+      this.initWebRTCForCurrentRoom();
       this.notifyRoom();
       return joinRes.room;
     }
@@ -694,6 +777,7 @@ class ClientRoomManager {
     this.currentRoom = newRoom;
     this.saveSession(code, '');
     this.subscribeToActiveRoom(code);
+    this.initWebRTCForCurrentRoom();
     this.notifyRoom();
     return newRoom;
   }
@@ -710,6 +794,7 @@ class ClientRoomManager {
       this.currentRoom = res.room;
       this.saveSession(cleanCode, res.player.id);
       this.subscribeToActiveRoom(cleanCode);
+      this.initWebRTCForCurrentRoom();
       this.notifyRoom();
       return { success: true, room: res.room, player: res.player };
     }
@@ -768,10 +853,33 @@ class ClientRoomManager {
       this.unsubCurrentRoom();
       this.unsubCurrentRoom = null;
     }
+    webrtcManager.cleanup();
     this.currentRoom = null;
     this.currentPlayerId = null;
     this.clearSession();
     this.notifyRoom();
+  }
+
+  public async updateProfile(nickname: string, avatar: string): Promise<Player | null> {
+    if (!this.currentRoom || !this.currentPlayerId) return null;
+    const code = this.currentRoom.code || this.currentRoom.roomCode;
+    const updated = await RoomManager.updatePlayerProfile(code, this.currentPlayerId, nickname, avatar);
+    if (updated) {
+      const idx = this.currentRoom.players.findIndex((p) => p.id === this.currentPlayerId);
+      if (idx !== -1) {
+        this.currentRoom.players[idx] = updated;
+      }
+      this.notifyRoom();
+    }
+    return updated;
+  }
+
+  public async checkRoom(code: string): Promise<{ exists: boolean; room?: Room; playerCount: number }> {
+    const r = await RoomManager.getRoom(code);
+    if (r) {
+      return { exists: true, room: r, playerCount: r.players.length };
+    }
+    return { exists: false, playerCount: 0 };
   }
 
   public async updatePlayerScore(playerId: string, scoreBonus: number) {
